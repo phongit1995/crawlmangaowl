@@ -10,7 +10,7 @@ let path = require('path');
 const  { isCloudflareJSChallenge ,makeId} = require('./common');
 const REFERER ="https://mangaowl.com/";
 const listUserAgent = JSON.parse(fs.readFileSync(path.join(__dirname,"./userAgent.json"),'utf-8'));
-const USER_ARGENT=process.env.USER_AGENT || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36";
+const USER_ARGENT=process.env.USER_AGENT || "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) coc_coc_browser/93.0.148 Chrome/87.0.4280.148 Safari/537.36";
 puppeteer.use(StealthPlugin());
 const getCookieCloudflare=async(proxy)=>{
     const KEY_CACHE="KEY_CACHE"+proxy;
@@ -22,18 +22,20 @@ const getCookieCloudflare=async(proxy)=>{
     if(proxy){
         newProxyUrl = await proxyChain.anonymizeProxy(proxy);
         browser = await puppeteer.launch({
-            args : ['--no-sandbox', '--disable-setuid-sandbox',`--proxy-server=${newProxyUrl}`]
+            args : ['--no-sandbox', '--disable-setuid-sandbox',`--proxy-server=${newProxyUrl}`],
+            //headless: false
         });
     }else {
         browser = await puppeteer.launch({
-            args : ['--no-sandbox', '--disable-setuid-sandbox']
+            args : ['--no-sandbox', '--disable-setuid-sandbox'],
+            // headless: false
         });
     }
     
     const page = await browser.newPage();
     await page.setUserAgent(USER_ARGENT);
     await page.authenticate();
-    await page.goto("https://mangaowl.com/single/69034/another-world-where-i-can-t-even-collapse-and-die",{
+    await page.goto("https://mangaowl.com/single/20028/hyakunen-kesshou-mokuroku",{
         timeout:45000,
         waitUntil: 'domcontentloaded'
     })
@@ -46,7 +48,7 @@ const getCookieCloudflare=async(proxy)=>{
             waitUntil: 'domcontentloaded'
         });
         content = await page.content();
-        if (count++ === 10) {
+        if (count++ === 20) {
           throw new Error('timeout on just a moment');
         }
     }
@@ -63,6 +65,57 @@ const getCookieCloudflare=async(proxy)=>{
     console.log(result);
     return result ;
 
+}
+const getCookieCloudflareHome=async(url,proxy)=>{
+    const KEY_CACHE="KEY_CACHE"+"Home";
+    const dataCache = cacheMemory.get(KEY_CACHE);
+    let newProxyUrl ,  browser;
+    if(proxy){
+        newProxyUrl = await proxyChain.anonymizeProxy(proxy);
+        browser = await puppeteer.launch({
+            args : ['--no-sandbox', '--disable-setuid-sandbox',`--proxy-server=${newProxyUrl}`],
+            //headless: false
+        });
+    }else {
+        browser = await puppeteer.launch({
+            args : ['--no-sandbox', '--disable-setuid-sandbox'],
+            // headless: false
+        });
+    }
+    console.log(url);
+    const page = await browser.newPage();
+    await page.setUserAgent(USER_ARGENT);
+    await page.authenticate();
+    await page.goto(url,{
+        timeout:45000,
+        waitUntil: 'domcontentloaded'
+    })
+    
+    let count = 1;
+    let content = await page.content();
+    while(isCloudflareJSChallenge(content)){
+        response = await page.waitForNavigation({
+            timeout: 50000,
+            waitUntil: 'domcontentloaded'
+        });
+        content = await page.content();
+        if (count++ === 20) {
+          throw new Error('timeout on just a moment');
+        }
+    }
+    if(newProxyUrl){
+        await proxyChain.closeAnonymizedProxy(newProxyUrl, true);
+    }
+    const cookies = await page.cookies();
+    console.log(cookies);
+    let result ="";
+    for(let cookie of cookies){
+        result+= `${cookie.name}=${cookie.value};` ;
+    }
+    cacheMemory.put(KEY_CACHE,result,1000*60*30);
+    let data = await page.content()
+    await browser.close();
+    return data ;
 }
 const ListImages = async (url)=>{
     const KEY_CACHE="KEY_CACHE"+url;
@@ -103,17 +156,19 @@ const ListImages = async (url)=>{
     }
 
 }
-const getAllHtml =async (url)=>{
-    const cookie = await getCookieCloudflare();
+const getAllHtml =async (cookie,url)=>{
+    console.log(cookie);
     let options = {
-        method:"get",
+        method:"GET",
         uri:url,
         headers:{
-            Referer:REFERER,
+            Referer:"https://mangaowl.com/",
             'User-Agent': USER_ARGENT,
             cookie:cookie
-        }
+        },
+        referrerPolicy: "strict-origin-when-cross-origin",
     }
+    console.log(options);
     let data = await request(options);
     console.log(data);
     return data ;
@@ -147,3 +202,4 @@ const SaveImages = (urlImages,urlPath,index,nameComic)=>{
 module.exports.ListImages =ListImages ;
 module.exports.getCookieCloudflare = getCookieCloudflare ;
 module.exports.getAllHtml =getAllHtml ;
+module.exports.getCookieCloudflareHome = getCookieCloudflareHome ;
